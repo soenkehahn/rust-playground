@@ -1,16 +1,16 @@
 #![allow(dead_code)]
 
+use std::mem;
+
 fn main() {
     let mut list: List<i32> = List::new();
     for i in 0..10 {
         list.push(i);
     }
     println!("{:?}", list);
-    for i in list.iter_mut() {
+    for i in list.into_iter() {
         println!("{:?}", i);
-        *i += 1;
     }
-    println!("{:?}", list);
 }
 
 #[derive(Debug)]
@@ -18,7 +18,39 @@ pub struct List<T> {
     head: Link<T>,
 }
 
-type Link<T> = Option<Box<Node<T>>>;
+#[derive(Debug)]
+struct Link<T> {
+    link: MyOption<Box<Node<T>>>,
+}
+
+#[derive(Debug)]
+pub enum MyOption<T> {
+    MySome(T),
+    MyNone,
+}
+
+impl<T> MyOption<T> {
+    fn take(&mut self) -> MyOption<T> {
+        mem::replace(self, MyOption::MyNone)
+    }
+
+    fn map<U, F>(self, f: F) -> MyOption<U>
+    where
+        F: FnOnce(T) -> U,
+    {
+        match self {
+            MyOption::MyNone => MyOption::MyNone,
+            MyOption::MySome(x) => MyOption::MySome(f(x)),
+        }
+    }
+
+    fn to_option(self) -> Option<T> {
+        match self {
+            MyOption::MyNone => None,
+            MyOption::MySome(x) => Some(x),
+        }
+    }
+}
 
 #[derive(Debug)]
 struct Node<T> {
@@ -26,32 +58,30 @@ struct Node<T> {
     next: Link<T>,
 }
 
-pub struct IntoIter<T>(List<T>);
-
-pub struct Iter<'a, T: 'a> {
-    next: Option<&'a Node<T>>,
-}
-
-pub struct IterMut<'a, T: 'a> {
-    next: Option<&'a mut Node<T>>,
-}
-
 impl<T> List<T> {
     pub fn new() -> Self {
-        List { head: None }
+        List {
+            head: Link {
+                link: MyOption::MyNone,
+            },
+        }
     }
 
     pub fn push(&mut self, elem: T) {
         let new_node = Box::new(Node {
             elem: elem,
-            next: self.head.take(),
+            next: Link {
+                link: self.head.link.take(),
+            },
         });
 
-        self.head = Some(new_node);
+        self.head = Link {
+            link: MyOption::MySome(new_node),
+        };
     }
 
-    pub fn pop(&mut self) -> Option<T> {
-        self.head.take().map(|node| {
+    pub fn pop(&mut self) -> MyOption<T> {
+        self.head.link.take().map(|node| {
             let node = *node;
             self.head = node.next;
             node.elem
@@ -61,54 +91,23 @@ impl<T> List<T> {
     pub fn into_iter(self) -> IntoIter<T> {
         IntoIter(self)
     }
-
-    pub fn iter(&self) -> Iter<T> {
-        Iter {
-            next: self.head.as_ref().map(|node| &**node),
-        }
-    }
-
-    pub fn iter_mut(&mut self) -> IterMut<T> {
-        IterMut {
-            next: self.head.as_mut().map(|node| &mut **node),
-        }
-    }
 }
 
 impl<T> Drop for List<T> {
     fn drop(&mut self) {
-        let mut cur_link = self.head.take();
-        while let Some(mut boxed_node) = cur_link {
-            cur_link = boxed_node.next.take();
+        let mut cur_link = self.head.link.take();
+        while let MyOption::MySome(mut boxed_node) = cur_link {
+            cur_link = boxed_node.next.link.take();
         }
     }
 }
 
+pub struct IntoIter<T>(List<T>);
+
 impl<T> Iterator for IntoIter<T> {
     type Item = T;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.pop()
-    }
-}
-
-impl<'a, T> Iterator for Iter<'a, T> {
-    type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.next.map(|node| {
-            self.next = node.next.as_ref().map(|node| &**node);
-            &node.elem
-        })
-    }
-}
-
-impl<'a, T> Iterator for IterMut<'a, T> {
-    type Item = &'a mut T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.next.take().map(|node| {
-            self.next = node.next.as_mut().map(|node| &mut **node);
-            &mut node.elem
-        })
+        self.0.pop().to_option()
     }
 }
