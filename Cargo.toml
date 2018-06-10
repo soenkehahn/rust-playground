@@ -1,0 +1,7 @@
+[package]
+authors = ["Sönke Hahn <soenkehahn@gmail.com>"]
+name = "playground"
+version = "0.1.0"
+[dependencies]
+atom = "*"
+num-bigint = "*"
