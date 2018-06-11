@@ -25,10 +25,7 @@ impl<T> List<T> {
 
     fn prepend(self, a: T) -> List<T> {
         List {
-            list: InnerList::Cons(Inner {
-                head: a,
-                tail: Box::new(self.list),
-            }),
+            list: InnerList::Cons(a, Box::new(self.list)),
         }
     }
 }
@@ -40,9 +37,9 @@ impl<T> Iterator for List<T> {
         let old = std::mem::replace(&mut self.list, InnerList::Empty);
         match old {
             InnerList::Empty => None,
-            InnerList::Cons(inner) => {
-                self.list = *inner.tail;
-                Some(inner.head)
+            InnerList::Cons(head, tail) => {
+                self.list = *tail;
+                Some(head)
             }
         }
     }
@@ -51,11 +48,5 @@ impl<T> Iterator for List<T> {
 #[derive(Debug)]
 enum InnerList<T> {
     Empty,
-    Cons(Inner<T>),
-}
-
-#[derive(Debug)]
-struct Inner<T> {
-    head: T,
-    tail: Box<InnerList<T>>,
+    Cons(T, Box<InnerList<T>>),
 }
